@@ -1,6 +1,6 @@
 # Generative Universe v1.2.2
 
-Generative Universe is a procedural simulation of a dynamic and expansive 2D universe with interactive celestial objects.
+Generative Universe is a procedural simulation of a 2D universe.
 
 ## Controls
 
