@@ -1,6 +1,6 @@
-# Generative Universe v1.2.2
+#  2.5D universe
 
-Generative Universe is a procedural simulation of a 2D universe.
+This is a procedural simulation of a 2D universe.
 
 ## Controls
 
