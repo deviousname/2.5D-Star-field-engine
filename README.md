@@ -1,6 +1,6 @@
 #  2.5D universe
 
-This is a procedural simulation of a 2D universe.
+This is a procedural simulation of a 2.5D universe.
 
 ## Controls
 
