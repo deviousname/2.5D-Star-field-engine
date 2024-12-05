@@ -28,7 +28,7 @@ This is a procedural simulation of a 2.5D universe.
 3. **Run the Simulation**:
    Execute the main Python script:
    ```bash
-   python generative_universe.py
+   python main.py
    ```
 
 ---
