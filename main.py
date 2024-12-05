@@ -1,4 +1,4 @@
-# Generative Universe v1.2.2
+# 2.5D Generative Universe
 
 import pygame
 import random
@@ -19,32 +19,32 @@ pygame.init()
 
 # Screen dimensions
 WIDTH, HEIGHT = 1920, 1080
-fullscreen = True
+fullscreen = False
 
-# Other constants
-NUM_STARS = 255
-MIN_DEPTH = .00001
-MAX_DEPTH = 100.0  # Depth range
+# Number of stars
+NUM_STARS = 100  # Increased for better star density
 
 # Grid size for spatial partitioning
 GRID_SIZE = 100  # Increased grid size for better performance
 
-# Scroll speeds
-PLAYER_MOVEMENT_SPEED = 100  # Pixels per second for WASD
-
 # Player movement parameters
+PLAYER_MOVEMENT_SPEED = 100  # Pixels per second for WASD
 MOMENTUM_DECAY = 0.95  # Momentum decay rate per frame
 MINIMUM_MOVEMENT = 0.05  # Minimum movement value to prevent complete stop
 
 # Depth change rate
 DEPTH_CHANGE_RATE = 1  # Adjust this value to control depth change speed
 
+# Depth range
+MIN_DEPTH = 0.1
+MAX_DEPTH = 100.0
+
 # Fog configuration
-FOG_START = MAX_DEPTH // 4
+FOG_START = MAX_DEPTH / 4
 FOG_END = MAX_DEPTH
 
 # Phenomena configuration
-MIN_PHENOMENA_DEPTH = MAX_DEPTH * .8  # Ensures all phenomena are at deep depths
+MIN_PHENOMENA_DEPTH = MAX_DEPTH * 0.8  # Ensures all phenomena are at deep depths
 MAX_GALAXIES = 8  # Increased limit for galaxies
 
 # Effect configurations
@@ -101,6 +101,65 @@ PHENOMENA_TYPES = [
 SCALE_EXPONENT = 0.33
 SCALE_FACTOR = 2
 
+# Colors for targeting box
+TARGET_COLOR = (255, 0, 0)  # Red for targeting box
+
+# =========================
+# Player Class
+# =========================
+
+@dataclass
+class Player:
+    """
+    Represents the player in the universe.
+    """
+    depth: float = 1.0  # Starting depth
+    velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))
+    acceleration: Vector2 = field(default_factory=lambda: Vector2(0, 0))
+
+    def handle_input(self, dt: float) -> float:
+        """
+        Handle player input and update velocity and depth.
+
+        Args:
+            dt (float): Delta time in seconds.
+
+        Returns:
+            float: Change in depth.
+        """
+        keys = pygame.key.get_pressed()
+        self.acceleration = Vector2(0, 0)
+        depth_change = 0.0
+
+        if keys[pygame.K_w]:  # Move up
+            self.acceleration.y = -PLAYER_MOVEMENT_SPEED
+        if keys[pygame.K_s]:  # Move down
+            self.acceleration.y = PLAYER_MOVEMENT_SPEED
+        if keys[pygame.K_a]:  # Move left
+            self.acceleration.x = -PLAYER_MOVEMENT_SPEED
+        if keys[pygame.K_d]:  # Move right
+            self.acceleration.x = PLAYER_MOVEMENT_SPEED
+        if keys[pygame.K_q]:  # Move out (increase depth)
+            depth_change += DEPTH_CHANGE_RATE * dt
+        if keys[pygame.K_e]:  # Move in (decrease depth)
+            depth_change -= DEPTH_CHANGE_RATE * dt
+
+        # Apply acceleration to velocity
+        self.velocity += self.acceleration * dt
+
+        # Apply momentum decay
+        self.velocity *= MOMENTUM_DECAY
+
+        # Apply non-linear scaling to velocity for smoother movement
+        if self.velocity.length() > 0:
+            self.velocity.scale_to_length(max(self.velocity.length(), MINIMUM_MOVEMENT))
+
+        # Update player depth with clamping
+        self.depth += math.copysign(abs(depth_change) ** 1.2, depth_change)  # Non-linear depth change
+        self.depth = max(MIN_DEPTH, min(MAX_DEPTH, self.depth))  # Clamp depth
+
+        return depth_change  # Return depth change for updating stars
+
 # =========================
 # Utility Functions
 # =========================
@@ -108,16 +167,9 @@ SCALE_FACTOR = 2
 def wrap_depth(depth: float) -> float:
     """
     Wrap depth within [MIN_DEPTH, MAX_DEPTH] toroidally.
-
-    Args:
-        depth (float): The current depth.
-
-    Returns:
-        float: Wrapped depth.
     """
     depth_range = MAX_DEPTH - MIN_DEPTH
     return MIN_DEPTH + (depth - MIN_DEPTH) % depth_range
-
 
 def calculate_scale(
     base_size: float,
@@ -129,17 +181,6 @@ def calculate_scale(
 ) -> int:
     """
     Calculate the scaled size of an object based on its depth and distance from the center.
-
-    Args:
-        base_size (float): The base size of the object.
-        depth (float): The depth of the object.
-        position (Vector2, optional): The position of the object.
-        center (Vector2, optional): The center of the screen.
-        exponent (float): Controls scaling sensitivity.
-        scale_factor (float): Multiplier to adjust the overall size.
-
-    Returns:
-        int: The scaled size, ensuring a minimum size of 1.
     """
     perspective = (1 / depth) ** exponent
     scaled_size = base_size * perspective * scale_factor
@@ -154,22 +195,14 @@ def calculate_scale(
     final_scaled_size = int(scaled_size * distance_scale)
     return max(1, final_scaled_size)
 
-
 def calculate_fog_alpha(depth: float) -> int:
     """
     Calculate the fog alpha based on the depth.
-
-    Args:
-        depth (float): The depth of the object.
-
-    Returns:
-        int: Fog alpha value.
     """
     if FOG_END == FOG_START:
         return 255 if depth >= FOG_END else 0
     fog_alpha = 255 - int(255 * (depth - FOG_START) / (FOG_END - FOG_START))
     return max(0, min(255, fog_alpha))  # Ensure alpha stays within bounds
-
 
 def get_wrapped_positions(
     pos: Vector2, size: int, glow_size: int = 0
@@ -177,14 +210,6 @@ def get_wrapped_positions(
     """
     Given a position, size, and optional glow size, return a list of positions
     where the object and its glow should be drawn to account for screen wrapping.
-
-    Args:
-        pos (Vector2): The original position of the object.
-        size (int): The main size of the object.
-        glow_size (int, optional): The maximum radius of the glow effect. Defaults to 0.
-
-    Returns:
-        List[Vector2]: Positions where the object should be drawn.
     """
     positions = [pos]
     total_size = size + glow_size
@@ -212,6 +237,55 @@ def get_wrapped_positions(
         positions.append(Vector2(pos.x - WIDTH, pos.y - HEIGHT))
 
     return positions
+
+def draw_target_box(surface, pos, size, color, thickness=2):
+    """
+    Draw a retro-style targeting box around a position.
+
+    The box consists of lines on the corners only, giving a retro feel.
+    """
+    half_size = size // 2
+
+    # Define the rectangle coordinates
+    left = pos.x - half_size
+    right = pos.x + half_size
+    top = pos.y - half_size
+    bottom = pos.y + half_size
+
+    # Define the length of corner lines
+    corner_length = size // 4
+
+    # Top-left corner
+    pygame.draw.line(surface, color, (left, top), (left + corner_length, top), thickness)
+    pygame.draw.line(surface, color, (left, top), (left, top + corner_length), thickness)
+
+    # Top-right corner
+    pygame.draw.line(surface, color, (right, top), (right - corner_length, top), thickness)
+    pygame.draw.line(surface, color, (right, top), (right, top + corner_length), thickness)
+
+    # Bottom-left corner
+    pygame.draw.line(surface, color, (left, bottom), (left + corner_length, bottom), thickness)
+    pygame.draw.line(surface, color, (left, bottom), (left, bottom - corner_length), thickness)
+
+    # Bottom-right corner
+    pygame.draw.line(surface, color, (right, bottom), (right - corner_length, bottom), thickness)
+    pygame.draw.line(surface, color, (right, bottom), (right, bottom - corner_length), thickness)
+
+def handle_mouse_click(mouse_pos, stars):
+    """
+    Handle mouse click events to target stars.
+    """
+    mouse_vector = Vector2(mouse_pos)
+    clicked_star = None
+
+    # Iterate in reverse to prioritize stars drawn on top
+    for star in reversed(stars):
+        size = star.get_draw_size()
+        if (star.pos - mouse_vector).length() <= size:
+            clicked_star = star
+            break
+
+    return clicked_star
 
 # =========================
 # Data Classes
@@ -376,7 +450,6 @@ class OrbitalBody:
             iteration += 1
         return E
 
-
 @dataclass(init=False)
 class Planet(OrbitalBody):
     """
@@ -395,7 +468,6 @@ class Planet(OrbitalBody):
         num_moons = random.randint(0, 2)
         self.moons = [Moon(self) for _ in range(num_moons)]
 
-
 @dataclass(init=False)
 class Moon(OrbitalBody):
     """
@@ -411,13 +483,11 @@ class Moon(OrbitalBody):
             orbital_period_range=(20, 50),
         )
 
-
 @dataclass
 class Star:
     """
     Represents a star in the universe.
     """
-    # Remove 'id' from the constructor parameters
     id: int = field(init=False)
     x: float
     y: float
@@ -477,7 +547,7 @@ class Star:
 
     def update(self, player_velocity: Vector2, depth_change: float, dt: float) -> None:
         """
-        Update the star's position and depth.
+        Update the star's position and depth with inversion-based wrapping.
 
         Args:
             player_velocity (Vector2): The player's current velocity.
@@ -486,8 +556,27 @@ class Star:
         """
         if not self.fixed_depth:
             # Apply non-linear depth changes using exponential scaling
-            self.depth += math.copysign(abs(depth_change) ** 1.2, depth_change)
-            self.depth = wrap_depth(self.depth)
+            new_depth = self.depth + math.copysign(abs(depth_change) ** 1.2, depth_change)
+            wrapped_depth = False
+
+            # Handle depth wrapping
+            if new_depth > MAX_DEPTH:
+                self.depth = wrap_depth(new_depth)
+                wrapped_depth = True
+            elif new_depth < MIN_DEPTH:
+                self.depth = wrap_depth(new_depth)
+                wrapped_depth = True
+            else:
+                self.depth = new_depth
+
+            # Handle depth-based position inversion when wrapping
+            if wrapped_depth:
+                self.pos.x = WIDTH - self.pos.x
+                self.pos.y = HEIGHT - self.pos.y
+
+                # Ensure the inverted position is within bounds to prevent immediate re-wrapping
+                self.pos.x = max(0.1, min(self.pos.x, WIDTH - 0.1))
+                self.pos.y = max(0.1, min(self.pos.y, HEIGHT - 0.1))
 
         depth_factor = max(self.depth, 1.0)  # Prevent division by zero
 
@@ -495,9 +584,31 @@ class Star:
         self.pos.x -= (player_velocity.x / depth_factor) * dt * 50
         self.pos.y -= (player_velocity.y / depth_factor) * dt * 50
 
-        # Screen wrapping with toroidal logic
-        self.pos.x %= WIDTH
-        self.pos.y %= HEIGHT
+        # Inversion-Based Screen Wrapping
+
+        # Horizontal Wrapping
+        if self.pos.x < 0:
+            self.pos.x = WIDTH
+            self.pos.y = HEIGHT - self.pos.y
+            # Adjust to prevent oscillation
+            self.pos.y = max(0.1, min(self.pos.y, HEIGHT - 0.1))
+        elif self.pos.x > WIDTH:
+            self.pos.x = 0
+            self.pos.y = HEIGHT - self.pos.y
+            # Adjust to prevent oscillation
+            self.pos.y = max(0.1, min(self.pos.y, HEIGHT - 0.1))
+
+        # Vertical Wrapping
+        if self.pos.y < 0:
+            self.pos.y = HEIGHT
+            self.pos.x = WIDTH - self.pos.x
+            # Adjust to prevent oscillation
+            self.pos.x = max(0.1, min(self.pos.x, WIDTH - 0.1))
+        elif self.pos.y > HEIGHT:
+            self.pos.y = 0
+            self.pos.x = WIDTH - self.pos.x
+            # Adjust to prevent oscillation
+            self.pos.x = max(0.1, min(self.pos.x, WIDTH - 0.1))
 
         # Update planets
         for planet in self.planets:
@@ -559,7 +670,7 @@ class Star:
                 glow_surface = pygame.Surface(
                     (glow_radius * 2, glow_radius * 2), pygame.SRCALPHA
                 )
-                glow_color = (vibrant_color[0], vibrant_color[1], vibrant_color[2], EFFECT_CONFIG.get("pulsing", {}).get("glow_strength", 8))
+                glow_color = (*vibrant_color[:3], EFFECT_CONFIG.get("pulsing", {}).get("glow_strength", 8))
                 pygame.draw.circle(
                     glow_surface, glow_color, (glow_radius, glow_radius), glow_radius
                 )
@@ -582,6 +693,9 @@ class Star:
         distance = self.pos.distance_to(mouse_pos)
         return distance <= size
 
+# =========================
+# Phenomenon Class
+# =========================
 
 @dataclass(init=False)
 class Phenomenon(Star):
@@ -878,64 +992,6 @@ class Phenomenon(Star):
         """
         pygame.draw.circle(surface, self.color, (int(pos.x), int(pos.y)), size)
 
-
-# =========================
-# Player Class
-# =========================
-
-@dataclass
-class Player:
-    """
-    Represents the player in the universe.
-    """
-    depth: float = 1.0  # Starting depth
-    velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))
-    acceleration: Vector2 = field(default_factory=lambda: Vector2(0, 0))
-
-    def handle_input(self, dt: float) -> float:
-        """
-        Handle player input and update velocity and depth.
-
-        Args:
-            dt (float): Delta time in seconds.
-
-        Returns:
-            float: Change in depth.
-        """
-        keys = pygame.key.get_pressed()
-        self.acceleration = Vector2(0, 0)
-        depth_change = 0.0
-
-        if keys[pygame.K_w]:  # Move up
-            self.acceleration.y = -PLAYER_MOVEMENT_SPEED
-        if keys[pygame.K_s]:  # Move down
-            self.acceleration.y = PLAYER_MOVEMENT_SPEED
-        if keys[pygame.K_a]:  # Move left
-            self.acceleration.x = -PLAYER_MOVEMENT_SPEED
-        if keys[pygame.K_d]:  # Move right
-            self.acceleration.x = PLAYER_MOVEMENT_SPEED
-        if keys[pygame.K_q]:  # Move out (increase depth)
-            depth_change += DEPTH_CHANGE_RATE * dt
-        if keys[pygame.K_e]:  # Move in (decrease depth)
-            depth_change -= DEPTH_CHANGE_RATE * dt
-
-        # Apply acceleration to velocity
-        self.velocity += self.acceleration * dt
-
-        # Apply momentum decay
-        self.velocity *= MOMENTUM_DECAY
-
-        # Apply non-linear scaling to velocity for smoother movement
-        if self.velocity.length() > 0:
-            self.velocity.scale_to_length(max(self.velocity.length(), MINIMUM_MOVEMENT))
-
-        # Update player depth with clamping
-        self.depth += math.copysign(abs(depth_change) ** 1.2, depth_change)  # Non-linear depth change
-        self.depth = max(MIN_DEPTH, min(MAX_DEPTH, self.depth))  # Clamp depth
-
-        return depth_change  # Return depth change for updating stars
-
-
 # =========================
 # Spatial Partitioning
 # =========================
@@ -998,7 +1054,6 @@ class SpatialGrid:
         """
         self.grid.clear()
 
-
 # =========================
 # Game Class
 # =========================
@@ -1031,7 +1086,7 @@ class Game:
             y = random.uniform(0, HEIGHT)
 
             # Decide whether to spawn a phenomenon or a star
-            if random.random() < 0.1:  # Increased chance for phenomena
+            if random.random() < 0.1:  # 10% chance for phenomena
                 phenomenon = Phenomenon(x=x, y=y)  # No depth passed
                 if phenomenon.name == "Galaxy" and galaxy_count < MAX_GALAXIES:
                     self.stars.append(phenomenon)
@@ -1051,11 +1106,9 @@ class Game:
         self.font = pygame.freetype.SysFont("Arial", 16)
 
         # =========================
-        # Panning Variables
+        # Targeting Variables
         # =========================
-        self.is_panning = False          # Flag to indicate if panning is active
-        self.pan_start_pos = Vector2(0, 0)  # Starting mouse position for panning
-        self.pan_last_pos = Vector2(0, 0)   # Last mouse position during panning
+        self.targeted_star: Optional[Star] = None  # Currently targeted star
 
     def update_spatial_grid(self) -> None:
         """
@@ -1121,28 +1174,10 @@ class Game:
                 if event.type == pygame.QUIT:
                     self.running = False
 
-                # Handle Mouse Button Down for panning
+                # Handle Mouse Button Down for targeting
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left mouse button
-                        self.is_panning = True
-                        self.pan_start_pos = Vector2(event.pos)
-                        self.pan_last_pos = Vector2(event.pos)
-
-                # Handle Mouse Button Up to stop panning
-                elif event.type == pygame.MOUSEBUTTONUP:
-                    if event.button == 1:  # Left mouse button
-                        self.is_panning = False
-
-                # Handle Mouse Motion for panning
-                elif event.type == pygame.MOUSEMOTION:
-                    if self.is_panning:
-                        current_mouse_pos = Vector2(event.pos)
-                        delta = current_mouse_pos - self.pan_last_pos
-                        self.pan_last_pos = current_mouse_pos
-
-                        # Update player's velocity based on mouse movement
-                        # Invert delta to move the view in the opposite direction of the mouse drag
-                        self.player.velocity -= delta * 5  # The multiplier adjusts panning speed
+                        self.targeted_star = handle_mouse_click(event.pos, self.stars)
 
             # Handle player input (keyboard)
             depth_change = self.player.handle_input(dt)
@@ -1153,7 +1188,14 @@ class Game:
             # Update and draw stars with culling, passing depth_change
             self.update_and_draw_stars(self.simulation_time, depth_change, dt)
 
-            # Check for hovered star
+            # Draw targeting box if a star is targeted
+            if self.targeted_star is not None:
+                pos = self.targeted_star.pos
+                size = self.targeted_star.get_draw_size()
+                box_size = size * 8  # Adjust multiplier for box size
+                draw_target_box(self.screen, pos, box_size, TARGET_COLOR, thickness=2)
+
+            # Check for hovered star (optional tooltip functionality)
             mouse_pos = Vector2(pygame.mouse.get_pos())
             hovered_star = None
             for star in self.stars:
@@ -1256,7 +1298,6 @@ class Game:
         for surface in text_surfaces:
             self.screen.blit(surface, (tooltip_x + padding, current_y))
             current_y += line_height
-
 
 # =========================
 # Main Execution
