@@ -15,7 +15,7 @@ WIDTH, HEIGHT = 1920, 1080
 fullscreen = False
 
 # Number of stars
-NUM_STARS = 500
+NUM_STARS = 100
 
 # Player movement parameters
 PLAYER_MOVEMENT_SPEED = 2000  # Pixels per second
@@ -23,7 +23,7 @@ DEPTH_CHANGE_RATE = 1  # Adjust this value to control depth change speed
 
 # Depth range
 MIN_DEPTH = 0.1
-MAX_DEPTH = 10.0
+MAX_DEPTH = 1.0
 
 # Colors
 STAR_COLOR = (255, 255, 255)
@@ -197,6 +197,10 @@ class Game:
             for star in self.stars:
                 star.update(self.player.velocity, depth_change, dt)
 
+            # If a star is targeted, center and bring it closer
+            if self.targeted_star is not None:
+                self.center_and_zoom_target(dt)
+
             # Draw everything
             self.screen.fill((0, 0, 0))  # Black background
             for star in self.stars:
@@ -232,6 +236,29 @@ class Game:
             self.targeted_star = clicked_star
         else:
             self.targeted_star = None
+
+    def center_and_zoom_target(self, dt):
+        """
+        Gradually bring the targeted star to the center and increase its depth.
+        """
+        if self.targeted_star is None:
+            return
+
+        # Calculate vector to center the targeted star
+        center = Vector2(WIDTH / 2, HEIGHT / 2)
+        to_center = center - self.targeted_star.pos
+
+        # Adjust velocity to gradually move the entire field to center the targeted star
+        move_speed = 1.0  # Adjust this value to control centering speed
+        displacement = to_center * move_speed * dt
+        for star in self.stars:
+            star.pos += displacement
+
+        # Gradually adjust the depth to bring the star closer
+        zoom_speed = 1.0  # Adjust this value to control zoom speed
+        depth_delta = (MIN_DEPTH - self.targeted_star.depth) * zoom_speed * dt
+        for star in self.stars:
+            star.update(Vector2(0, 0), depth_delta, dt)
 
 # =========================
 # Main Execution
