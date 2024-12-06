@@ -284,16 +284,14 @@ class Game:
                 size = self.targeted_star.get_draw_size()
                 box_size = size * 8
                 draw_target_box(self.screen, pos, box_size, TARGET_COLOR, thickness=2)
-                self.draw_tooltip(self.targeted_star, Vector2(WIDTH / 2, HEIGHT / 2))
-            else:
-                mouse_pos = Vector2(pygame.mouse.get_pos())
-                hovered_star = None
-                for star in self.stars:
-                    if star.is_hovered(mouse_pos):
-                        hovered_star = star
-                        break
-                if hovered_star:
-                    self.draw_tooltip(hovered_star, mouse_pos)
+            mouse_pos = Vector2(pygame.mouse.get_pos())
+            hovered_star = None
+            for star in self.stars:
+                if star.is_hovered(mouse_pos):
+                    hovered_star = star
+                    break
+            if hovered_star:
+                self.draw_tooltip(hovered_star, mouse_pos)
 
             pygame.display.flip()
 
@@ -306,7 +304,7 @@ class Game:
         self.spatial_grid.clear()
         for star in self.stars:
             self.spatial_grid.add_star(star)
-
+    
     def draw_tooltip(self, star: Star, mouse_pos: Vector2) -> None:
         """
         Draw a tooltip near the mouse cursor or near the screen center if a star is targeted.
@@ -319,13 +317,8 @@ class Game:
             wrapper = textwrap.TextWrapper(width=30)
             return wrapper.wrap(text)
 
-        # Determine position: near the mouse for hovering, near center for targeted
-        if self.targeted_star == star:
-            tooltip_x = WIDTH / 2 + 100
-            tooltip_y = HEIGHT / 2 - 100
-        else:
-            tooltip_x = mouse_pos.x + 15
-            tooltip_y = mouse_pos.y + 15
+        tooltip_x = mouse_pos.x + 15
+        tooltip_y = mouse_pos.y + 15
 
         # Prepare tooltip data
         if isinstance(star, Phenomenon):
