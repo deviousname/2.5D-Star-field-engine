@@ -29,7 +29,18 @@ def calculate_scale(
     if position is not None and center is not None:
         distance_from_center = position.distance_to(center)
         max_distance = math.sqrt((WIDTH / 2) ** 2 + (HEIGHT / 2) ** 2)
+        # Original distance scaling calculation
         distance_scale = max(0.5, 1.5 - (distance_from_center / max_distance))
+
+        # Introduce a depth factor: shallower = full effect, deeper = reduced effect
+        # For example, as depth increases, this factor decreases towards 0.
+        # At depth=1, factor=1.0 (no change), at larger depths factor < 1.0 reduces the effect.
+        depth_factor = 2.0 / (depth ** 0.5)  # square root reduces effect moderately at large depths
+
+        # Blend the distance_scale towards 1.0 as depth grows:
+        # When depth_factor = 1 (shallow), distance_scale stays the same.
+        # When depth_factor < 1 (deep), distance_scale is pulled closer to 1, reducing the position effect.
+        distance_scale = 1.0 + (distance_scale - 1.0) * depth_factor
     else:
         distance_scale = 1.0
 
