@@ -284,6 +284,16 @@ class Game:
                 size = self.targeted_star.get_draw_size()
                 box_size = size * 8
                 draw_target_box(self.screen, pos, box_size, TARGET_COLOR, thickness=2)
+                self.draw_tooltip(self.targeted_star, Vector2(WIDTH / 2, HEIGHT / 2))
+            else:
+                mouse_pos = Vector2(pygame.mouse.get_pos())
+                hovered_star = None
+                for star in self.stars:
+                    if star.is_hovered(mouse_pos):
+                        hovered_star = star
+                        break
+                if hovered_star:
+                    self.draw_tooltip(hovered_star, mouse_pos)
 
             pygame.display.flip()
 
@@ -299,16 +309,25 @@ class Game:
 
     def draw_tooltip(self, star: Star, mouse_pos: Vector2) -> None:
         """
-        Draw a tooltip near the mouse cursor with star information.
+        Draw a tooltip near the mouse cursor or near the screen center if a star is targeted.
 
         Args:
-            star (Star): The star being hovered.
-            mouse_pos (Vector2): Current mouse position.
+            star (Star): The star being hovered or targeted.
+            mouse_pos (Vector2): Current mouse position (used for hover tooltips).
         """
         def wrap_text(text: str, max_width: int) -> list:
             wrapper = textwrap.TextWrapper(width=30)
             return wrapper.wrap(text)
 
+        # Determine position: near the mouse for hovering, near center for targeted
+        if self.targeted_star == star:
+            tooltip_x = WIDTH / 2 + 100
+            tooltip_y = HEIGHT / 2 - 100
+        else:
+            tooltip_x = mouse_pos.x + 15
+            tooltip_y = mouse_pos.y + 15
+
+        # Prepare tooltip data
         if isinstance(star, Phenomenon):
             title = f"Phenomenon ID: #{star.id}"
             type_info = f"Type: {star.name}"
@@ -331,6 +350,7 @@ class Game:
             "Composition:",
         ] + composition_lines
 
+        # Render text surfaces
         text_surfaces = []
         for i, line in enumerate(tooltip_lines):
             if i == 0:
@@ -341,24 +361,26 @@ class Game:
                 surface, _ = self.font.render(line, fgcolor=(255, 255, 255))
             text_surfaces.append(surface)
 
+        # Tooltip size and position
         line_height = self.font.get_sized_height() + 4
         padding = 10
         width = max(surface.get_width() for surface in text_surfaces) + padding * 2
         height = len(text_surfaces) * line_height + padding * 2
-        tooltip_x = mouse_pos.x + 15
-        tooltip_y = mouse_pos.y + 15
 
+        # Ensure tooltip stays within screen bounds
         if tooltip_x + width > WIDTH:
-            tooltip_x = mouse_pos.x - width - 15
+            tooltip_x = WIDTH - width - 15
         if tooltip_y + height > HEIGHT:
-            tooltip_y = mouse_pos.y - height - 15
+            tooltip_y = HEIGHT - height - 15
 
+        # Draw tooltip background
         tooltip_surface = pygame.Surface((width, height), pygame.SRCALPHA)
         pygame.draw.rect(
             tooltip_surface, (0, 0, 0, 200), (0, 0, width, height), border_radius=8
         )
         self.screen.blit(tooltip_surface, (tooltip_x, tooltip_y))
 
+        # Draw text lines
         current_y = tooltip_y + padding
         for surface in text_surfaces:
             self.screen.blit(surface, (tooltip_x + padding, current_y))
